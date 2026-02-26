@@ -11,6 +11,15 @@ class MCPAppRenderer {
         this.iframe = null;
         this.onAction = options.onAction || (() => {});
         this.messageHandlers = new Map();
+        // Configure allowed origins for postMessage communication.
+        // If not provided, default to the current origin.
+        if (Array.isArray(options.allowedOrigins) && options.allowedOrigins.length > 0) {
+            this.allowedOrigins = options.allowedOrigins.slice();
+        } else if (typeof window !== 'undefined' && window.location && window.location.origin) {
+            this.allowedOrigins = [window.location.origin];
+        } else {
+            this.allowedOrigins = [];
+        }
         this.setupMessageListener();
     }
 
@@ -165,9 +174,25 @@ class MCPAppRenderer {
      */
     setupMessageListener() {
         window.addEventListener('message', (event) => {
-            // Security: In production, check event.origin
+            // Security: Check event.origin and event.source to ensure the message
+            // comes from a trusted origin and the expected iframe (if available).
+            if (!event || !event.origin) {
+                return;
+            }
 
-            const { type, id, toolName, params, intent, state } = event.data;
+            // If allowedOrigins is configured, require the event.origin to match.
+            if (Array.isArray(this.allowedOrigins) && this.allowedOrigins.length > 0) {
+                if (!this.allowedOrigins.includes(event.origin)) {
+                    return;
+                }
+            }
+
+            // If we have an iframe reference, ensure the message comes from it.
+            if (this.iframe && this.iframe.contentWindow && event.source !== this.iframe.contentWindow) {
+                return;
+            }
+
+            const { type, id, toolName, params, intent, state } = event.data || {};
 
             switch (type) {
                 case 'mcp-bridge-ready':

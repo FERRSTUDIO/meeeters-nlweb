@@ -61,7 +61,7 @@ async def who_endpoint(request: web.Request) -> web.Response:
     except Exception as e:
         print(f"Error in WHO endpoint: {e}")
         return web.json_response(
-            {"error": str(e)},
+            {"error": "Internal server error"},
             status=500
         )
 
@@ -154,10 +154,11 @@ async def mcp_endpoint(request: web.Request) -> web.Response:
                             "isError": False
                         }
                     except Exception as e:
+                        print(f"Error processing query: {e}")
                         result = {
                             "content": [{
                                 "type": "text",
-                                "text": f"Error processing query: {str(e)}"
+                                "text": "Error processing query. Please try again."
                             }],
                             "isError": True
                         }
@@ -210,7 +211,7 @@ async def mcp_endpoint(request: web.Request) -> web.Response:
             "jsonrpc": "2.0",
             "error": {
                 "code": -32603,  # Internal error
-                "message": f"Internal error: {str(e)}"
+                "message": "Internal server error"
             },
             "id": data.get("id") if "data" in locals() else None
         })
@@ -242,8 +243,9 @@ async def index_page(request: web.Request) -> web.Response:
         )
     except Exception as e:
         print(f"Error serving index page: {e}")
+        # Don't expose internal error details to users
         return web.Response(
-            text=f"Error loading page: {str(e)}",
+            text="Error loading page. Please try again later.",
             status=500
         )
 
@@ -261,9 +263,10 @@ async def health_check(request: web.Request) -> web.Response:
             "stats": stats
         })
     except Exception as e:
+        print(f"Health check error: {e}")
         return web.json_response({
             "status": "unhealthy",
-            "error": str(e)
+            "error": "Service unavailable"
         }, status=503)
 
 
@@ -273,7 +276,8 @@ async def stats_endpoint(request: web.Request) -> web.Response:
         stats = await who_handler.get_stats()
         return web.json_response(stats)
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        print(f"Stats endpoint error: {e}")
+        return web.json_response({"error": "Internal server error"}, status=500)
 
 
 async def clear_cache_endpoint(request: web.Request) -> web.Response:
@@ -282,7 +286,8 @@ async def clear_cache_endpoint(request: web.Request) -> web.Response:
         await who_handler.clear_caches()
         return web.json_response({"status": "Caches cleared"})
     except Exception as e:
-        return web.json_response({"error": str(e)}, status=500)
+        print(f"Clear cache error: {e}")
+        return web.json_response({"error": "Internal server error"}, status=500)
 
 
 # ========== MIDDLEWARE ==========
@@ -311,9 +316,9 @@ async def error_middleware(request: web.Request, handler):
         print(f"Unhandled error: {e}")
         import traceback
         traceback.print_exc()
+        # Don't expose exception details to users
         return web.json_response({
-            "error": "Internal server error",
-            "detail": str(e)
+            "error": "Internal server error"
         }, status=500)
 
 

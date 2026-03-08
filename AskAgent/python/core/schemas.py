@@ -59,13 +59,6 @@ class MessageType(str, Enum):
     NO_RESULTS = "no_results"
     COMPLETE = "complete"
     TOOL_SELECTION = "tool_selection"
-    
-    # Chat-specific events
-    CONVERSATION_START = "conversation_start"
-    USER_JOINING = "user_joining"
-    USER_LEAVING = "user_leaving"
-    JOIN = "join"
-    LEAVE = "leave"
 
 
 @dataclass

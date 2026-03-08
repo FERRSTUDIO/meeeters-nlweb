@@ -903,6 +903,185 @@ def create_dynamics365_db(customers, contacts, employees, deals):
     print(f"  Created {db_path}")
 
 # ============================================================
+# Notion-style Meeting Notes Database
+# ============================================================
+
+def create_notion_db(customers, contacts, employees, deals, patterns):
+    """Create a Notion-style database with unstructured meeting notes."""
+    db_path = os.path.join(DB_DIR, "notion.db")
+    if os.path.exists(db_path):
+        os.remove(db_path)
+
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+
+    # Create notes table
+    cur.execute("""
+        CREATE TABLE notion_notes (
+            note_id TEXT PRIMARY KEY,
+            title TEXT,
+            content TEXT,
+            author TEXT,
+            created_date TEXT,
+            updated_date TEXT,
+            tags TEXT
+        )
+    """)
+
+    # Generate meeting notes with unstructured references to customers
+    notes = []
+    note_templates = [
+        {
+            "title": "Weekly sync with {customer_short}",
+            "content": "Met with {contact_first} and {contact_last} from {customer_name}. They mentioned {topic}. {observation}",
+            "tags": "customer-meeting,sales"
+        },
+        {
+            "title": "Account review: {customer_short}",
+            "content": "{contact_first} at {customer_name} raised concerns about {issue}. Need to follow up on {action}.",
+            "tags": "account-review,action-item"
+        },
+        {
+            "title": "Demo notes - {customer_short}",
+            "content": "Presented {product} to the team at {customer_name}. {contact_first} {contact_last} was impressed by {feature}. Next steps: {next_step}",
+            "tags": "demo,sales"
+        },
+        {
+            "title": "Support escalation - {customer_short}",
+            "content": "{customer_name} is experiencing {problem}. Spoke with {contact_first}, they're concerned about impact on {business_area}.",
+            "tags": "support,escalation"
+        }
+    ]
+
+    topics = ["expanding to new regions", "API performance", "integrating with Datadog", "migrating from legacy systems",
+              "security compliance", "mobile app requirements", "data privacy concerns", "custom integrations"]
+    observations = ["Team seemed very engaged.", "Budget approved for Q2.", "Waiting on legal review.",
+                   "Competitor mentioned (Salesforce).", "Timeline is tight.", "Very positive feedback."]
+    issues = ["API rate limits", "slow dashboard load times", "missing SSO integration", "unclear pricing"]
+    actions = ["scheduling technical deep-dive", "sending proposal", "looping in solutions engineering"]
+    products = ["Contoso Platform", "Analytics Module", "API Gateway", "Security Suite"]
+    features = ["real-time analytics", "the new dashboard", "SSO integration", "API performance"]
+    next_steps = ["send follow-up email", "schedule technical call", "prepare custom demo", "draft SOW"]
+    problems = ["intermittent API timeouts", "data sync issues", "login errors", "slow query performance"]
+    business_areas = ["quarterly reporting", "customer-facing dashboards", "internal analytics", "compliance auditing"]
+
+    # Create notes for pattern customers with clear references
+    # Use 5 different customers to create variety
+    at_risk_customers = patterns["deals_at_risk"][:5]
+
+    for idx, cust_id in enumerate(at_risk_customers):
+        cust = next(c for c in customers if c["contoso_id"] == cust_id)
+        cust_contacts = [c for c in contacts if c["customer_id"] == cust_id]
+        if cust_contacts:
+            contact = random.choice(cust_contacts)
+            # Assign different issue types to different customers for variety
+            if idx == 0:
+                issue = "API rate limits"
+                problem = "intermittent API timeouts"
+            elif idx == 1:
+                issue = "slow dashboard load times"
+                problem = "slow query performance"
+            elif idx == 2:
+                issue = "missing SSO integration"
+                problem = "authentication errors"
+            elif idx == 3:
+                issue = "data sync issues"
+                problem = "data sync failures"
+            else:
+                issue = "unclear pricing"
+                problem = "billing discrepancies"
+
+            template = random.choice(note_templates)
+
+            customer_short = cust["name"].split()[0]  # Just first word
+
+            note_id = f"NOTE-{len(notes)+1:04d}"
+            created = fake.date_time_between(start_date="-60d", end_date="-10d")
+
+            title = template["title"].format(customer_short=customer_short)
+            content = template["content"].format(
+                customer_name=cust["name"],
+                customer_short=customer_short,
+                contact_first=contact["first"],
+                contact_last=contact["last"],
+                topic=random.choice(topics),
+                observation=random.choice(observations),
+                issue=issue,
+                action=random.choice(actions),
+                product=random.choice(products),
+                feature=random.choice(features),
+                next_step=random.choice(next_steps),
+                problem=problem,
+                business_area=random.choice(business_areas)
+            )
+
+            author = random.choice(employees)["email"]
+
+            notes.append({
+                "note_id": note_id,
+                "title": title,
+                "content": content,
+                "author": author,
+                "created_date": created.isoformat(),
+                "updated_date": created.isoformat(),
+                "tags": template["tags"]
+            })
+
+    # Add more general notes for other customers (10-15 total notes)
+    random_customers = random.sample([c for c in customers if c["contoso_id"] not in patterns["deals_at_risk"][:5]], 8)
+    for cust in random_customers:
+        cust_contacts = [c for c in contacts if c["customer_id"] == cust["contoso_id"]]
+        if cust_contacts:
+            contact = random.choice(cust_contacts)
+            template = random.choice(note_templates)
+
+            customer_short = cust["name"].split()[0]
+
+            note_id = f"NOTE-{len(notes)+1:04d}"
+            created = fake.date_time_between(start_date="-90d", end_date="-5d")
+
+            title = template["title"].format(customer_short=customer_short)
+            content = template["content"].format(
+                customer_name=cust["name"],
+                customer_short=customer_short,
+                contact_first=contact["first"],
+                contact_last=contact["last"],
+                topic=random.choice(topics),
+                observation=random.choice(observations),
+                issue=random.choice(issues),
+                action=random.choice(actions),
+                product=random.choice(products),
+                feature=random.choice(features),
+                next_step=random.choice(next_steps),
+                problem=random.choice(problems),
+                business_area=random.choice(business_areas)
+            )
+
+            author = random.choice(employees)["email"]
+
+            notes.append({
+                "note_id": note_id,
+                "title": title,
+                "content": content,
+                "author": author,
+                "created_date": created.isoformat(),
+                "updated_date": created.isoformat(),
+                "tags": template["tags"]
+            })
+
+    # Insert notes
+    for note in notes:
+        cur.execute("""
+            INSERT INTO notion_notes (note_id, title, content, author, created_date, updated_date, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (note["note_id"], note["title"], note["content"], note["author"],
+              note["created_date"], note["updated_date"], note["tags"]))
+
+    conn.commit()
+    conn.close()
+    print(f"  Created {db_path}")
+
+# ============================================================
 # Main
 # ============================================================
 
@@ -927,10 +1106,11 @@ def main():
     create_hubspot_db(customers, contacts, employees, deals, patterns)
     create_jira_db(customers, contacts, employees, deals, patterns)
     create_dynamics365_db(customers, contacts, employees, deals)
+    create_notion_db(customers, contacts, employees, deals, patterns)
 
     # Verify counts
     print("\nVerifying...")
-    for db_name in ["hubspot.db", "jira.db", "dynamics365.db"]:
+    for db_name in ["hubspot.db", "jira.db", "dynamics365.db", "notion.db"]:
         db_path = os.path.join(DB_DIR, db_name)
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()

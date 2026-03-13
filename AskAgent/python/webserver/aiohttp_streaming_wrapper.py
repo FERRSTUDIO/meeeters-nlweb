@@ -39,7 +39,23 @@ class AioHttpStreamingWrapper:
         
         # For compatibility with existing handlers
         self.generate_mode = query_params.get('generate_mode', 'none')
-        
+        self.nlweb_protocol_version = query_params.get('_protocol_version')
+
+    async def write_sse_event(self, event_name: str, data: dict):
+        """Write a named SSE event (v0.55 format): event: X\\ndata: {...}\\n\\n"""
+        if not self.connection_alive:
+            return
+        try:
+            if self.request.transport and self.request.transport.is_closing():
+                self.connection_alive = False
+                return
+            msg = f"event: {event_name}\ndata: {json.dumps(data)}\n\n"
+            await self.response.write(msg.encode())
+            await asyncio.sleep(0)
+        except Exception as e:
+            logger.debug(f"Error writing SSE event: {e}")
+            self.connection_alive = False
+
     async def start_heartbeat(self):
         """Start sending SSE keepalive messages"""
         try:

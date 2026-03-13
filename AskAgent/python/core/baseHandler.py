@@ -115,6 +115,9 @@ class NLWebHandler:
         # Maximum number of results to return to the user
         self.max_results = get_param(query_params, "max_results", int, 10)
 
+        # Protocol version (v0.55 when using structured POST body)
+        self.protocol_version = query_params.get('_protocol_version')
+
         # the items that have been retrieved from the vector database, could be before decontextualization.
         # See below notes on fasttrack
         self.retrieved_items = []
@@ -413,8 +416,8 @@ class NLWebHandler:
                 )
                 self.final_retrieved_items = items
                 self.retrieval_done_event.set()
-        
-        logger.info("Preparation phase completed")
+
+        logger.info(f"Preparation phase completed. Retrieved {len(self.final_retrieved_items)} items.")
 
     def decontextualizeQuery(self):
         if (len(self.prev_queries) < 1):

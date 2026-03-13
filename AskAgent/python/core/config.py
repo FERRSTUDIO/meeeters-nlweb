@@ -102,6 +102,7 @@ class NLWebConfig:
     who_endpoint_enabled: bool = True  # Enable or disable the who endpoint
     api_keys: Dict[str, str] = field(default_factory=dict)  # API keys for external services
     who_endpoint: str = "http://localhost:8000/who"  # Endpoint for /who requests
+    scoring: Dict[str, Any] = field(default_factory=dict)  # Scoring configuration (e.g. nlwebscorer)
 
 @dataclass
 class ConversationStorageConfig:
@@ -487,7 +488,10 @@ class AppConfig:
         
         # Load who_endpoint from config
         who_endpoint = self._get_config_value(data.get("who_endpoint"), "http://localhost:8000/who")
-        
+
+        # Load scoring configuration
+        scoring = data.get("scoring", {})
+
         # Load headers from config
         headers = data.get("headers", {})
         
@@ -525,7 +529,8 @@ class AppConfig:
             aggregation_enabled=aggregation_enabled,
             who_endpoint_enabled=who_endpoint_enabled,
             api_keys=api_keys,
-            who_endpoint=who_endpoint
+            who_endpoint=who_endpoint,
+            scoring=scoring
         )
     
     def get_chatbot_instructions(self, instruction_type: str = "search_results") -> str:

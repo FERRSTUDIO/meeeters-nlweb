@@ -19,6 +19,60 @@ from core.schemas import create_assistant_result, create_status_message, Message
 from core.utils.utils import record_llm_call
 logger = get_configured_logger("ranking_engine")
 
+# Lazy-loaded NLWebScorer singleton
+_nlweb_scorer = None
+_nlweb_scorer_is_available = None  # Cached availability check
+
+def _nlweb_scorer_available():
+    """Check if NLWebScorer checkpoints exist and config is enabled (cached)."""
+    global _nlweb_scorer_is_available
+    if _nlweb_scorer_is_available is not None:
+        return _nlweb_scorer_is_available
+    from core.config import CONFIG
+    scorer_config = CONFIG.nlweb.scoring.get("nlwebscorer", {})
+    if not scorer_config.get("enabled"):
+        _nlweb_scorer_is_available = False
+        return False
+    import os
+    nlweb_root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))))
+    bert_cp = os.path.join(nlweb_root, scorer_config["bert_checkpoint"])
+    gam_cp = os.path.join(nlweb_root, scorer_config["gam_checkpoint"])
+    _nlweb_scorer_is_available = os.path.exists(bert_cp) and os.path.exists(gam_cp)
+    if _nlweb_scorer_is_available:
+        logger.info("NLWebScorer checkpoints found, will use as default scorer")
+    else:
+        logger.info("NLWebScorer checkpoints not found, using LLM scorer")
+    return _nlweb_scorer_is_available
+
+def _get_nlweb_scorer():
+    """Get or create the NLWebScorer instance (lazy-loaded on first use)."""
+    global _nlweb_scorer
+    if _nlweb_scorer is None:
+        from core.config import CONFIG
+        scorer_config = CONFIG.nlweb.scoring.get("nlwebscorer", {})
+
+        import os, sys
+        # Resolve NLWeb root: ranking.py -> core -> python -> code -> AskAgent -> NLWeb
+        nlweb_root = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))))
+        bert_cp = os.path.join(nlweb_root, scorer_config["bert_checkpoint"])
+        gam_cp = os.path.join(nlweb_root, scorer_config["gam_checkpoint"])
+
+        scorer_dir = os.path.join(nlweb_root, "NLWebScorer")
+        if scorer_dir not in sys.path:
+            sys.path.append(scorer_dir)  # append, not insert — NLWebScorer/config/ would shadow app's config
+        from inference.scorer import NLWebScorer
+
+        logger.info(f"Loading NLWebScorer: bert={bert_cp}, gam={gam_cp}")
+        _nlweb_scorer = NLWebScorer(
+            bert_checkpoint=bert_cp,
+            gam_checkpoint=gam_cp,
+            max_length=scorer_config.get("max_length", 1024),
+        )
+        logger.info("NLWebScorer loaded successfully")
+    return _nlweb_scorer
+
 
 class Ranking:
      
@@ -197,9 +251,49 @@ The user's question is: {request.query}. The item's description is {item.descrip
         
         except Exception as e:
             # Import here to avoid circular import
-            from config.config import CONFIG
+            from core.config import CONFIG
             if CONFIG.should_raise_exceptions():
                 raise  # Re-raise in testing/development mode
+
+    async def rankItemsWithScorer(self):
+        """Batch-score all items using NLWebScorer (no LLM calls)."""
+        scorer = _get_nlweb_scorer()
+        query = self.handler.decontextualized_query or self.handler.query
+
+        # Build items for scorer — full schema, let BERT handle semantics
+        scorer_items = []
+        for url, json_str, name, site in self.items:
+            schema_json = json.dumps(json_str) if isinstance(json_str, dict) else json_str
+            scorer_items.append({"name": name, "schema_json": schema_json})
+
+        results = scorer.score(query, scorer_items)
+
+        print(f"\n=== NLWebScorer results for: '{query}' ({len(results)} items) ===")
+        debug_rows = []
+        for i, (url, json_str, name, site) in enumerate(self.items):
+            score = results[i]["score"]
+            schema_object = json_str if isinstance(json_str, dict) else json.loads(json_str)
+            if isinstance(schema_object, list) and len(schema_object) > 0:
+                schema_object = schema_object[0]
+
+            desc = name
+            if isinstance(schema_object, dict):
+                desc = schema_object.get("description", schema_object.get("name", name))
+                if isinstance(desc, str) and len(desc) > 200:
+                    desc = desc[:200] + "..."
+
+            ansr = {
+                'url': url, 'site': site, 'name': name,
+                'ranking': {"score": score, "description": desc},
+                'schema_object': schema_object, 'sent': False
+            }
+            self.rankedAnswers.append(ansr)
+            debug_rows.append((score, name))
+
+        debug_rows.sort(key=lambda x: x[0], reverse=True)
+        for score, name in debug_rows:
+            print(f"  {score:3d} - {name[:70]}")
+        print("=== end scores ===")
 
     def shouldSend(self, result):
         # Get max_results from handler, or use default
@@ -322,18 +416,34 @@ The user's question is: {request.query}. The item's description is {item.descrip
                 self.handler.connection_alive_event.clear()
     
     async def do(self):
-    
-        tasks = []
-        for url, json_str, name, site in self.items:
-            if self.handler.connection_alive_event.is_set():  # Only add new tasks if connection is still alive
-                tasks.append(asyncio.create_task(self.rankItem(url, json_str, name, site)))
-       
-        # await self.sendMessageOnSitesBeingAsked(self.items)
 
-        try:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        except Exception as e:
-            return
+        # Determine scorer: auto-detect NLWebScorer if available, allow override via ?scorer=llm
+        scorer_param = self.handler.query_params.get('scorer', [None])
+        scorer_override = scorer_param[0] if isinstance(scorer_param, list) else scorer_param
+        if scorer_override == "llm":
+            use_nlwebscorer = False
+        elif scorer_override == "nlwebscorer":
+            use_nlwebscorer = True
+        else:
+            # Auto-detect: use NLWebScorer if checkpoints exist
+            use_nlwebscorer = _nlweb_scorer_available()
+
+        if use_nlwebscorer:
+            try:
+                await self.rankItemsWithScorer()
+            except Exception as e:
+                logger.error(f"NLWebScorer scoring failed: {e}", exc_info=True)
+                return
+        else:
+            tasks = []
+            for url, json_str, name, site in self.items:
+                if self.handler.connection_alive_event.is_set():
+                    tasks.append(asyncio.create_task(self.rankItem(url, json_str, name, site)))
+
+            try:
+                await asyncio.gather(*tasks, return_exceptions=True)
+            except Exception as e:
+                return
 
         if not self.handler.connection_alive_event.is_set():
             return

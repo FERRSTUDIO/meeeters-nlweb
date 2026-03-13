@@ -43,7 +43,38 @@ async def ask_handler(request: web.Request) -> web.Response:
                 query_params.update(dict(body_data))
         except Exception as e:
             logger.warning(f"Failed to parse POST body: {e}")
-    
+
+    # Detect and flatten v0.55 structured request format
+    if 'query' in query_params and isinstance(query_params['query'], dict):
+        q = query_params.pop('query')
+        query_params['query'] = q.get('text', '')
+        if 'site' in q:
+            query_params['site'] = q['site']
+        # Pass through extra query fields (scorer, itemType, etc.)
+        for k, v in q.items():
+            if k not in ('text', 'site') and k not in query_params:
+                query_params[k] = v
+
+        if 'context' in query_params and isinstance(query_params['context'], dict):
+            ctx = query_params.pop('context')
+            if 'prev' in ctx:
+                query_params['prev'] = ctx['prev']
+
+        if 'prefer' in query_params and isinstance(query_params['prefer'], dict):
+            pref = query_params.pop('prefer')
+            if 'streaming' in pref:
+                query_params['streaming'] = str(pref['streaming'])
+            if 'mode' in pref:
+                query_params['mode'] = pref['mode']
+            if 'response_format' in pref:
+                query_params['response_format'] = pref['response_format']
+
+        if 'meta' in query_params and isinstance(query_params['meta'], dict):
+            meta = query_params.pop('meta')
+            query_params['_protocol_version'] = meta.get('version', '0.55')
+        else:
+            query_params['_protocol_version'] = '0.55'
+
     # Check if SSE streaming is requested
     is_sse = request.get('is_sse', False)
     streaming = get_param(query_params, "streaming", str, "True")

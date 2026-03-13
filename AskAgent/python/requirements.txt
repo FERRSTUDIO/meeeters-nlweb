@@ -63,6 +63,10 @@ PyJWT>=2.8.0
 # For OpenSearch or Snowflake (both use httpx):
 # httpx>=0.28.1
 
+# For NLWebScorer (ModernBERT + GAM):
+# torch>=2.0.0
+# transformers>=4.36.0
+
 # For Ollama
 # ollama>=0.5.1
 

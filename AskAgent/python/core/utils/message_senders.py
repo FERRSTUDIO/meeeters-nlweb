@@ -15,26 +15,31 @@ from typing import Dict, Any, Optional, Union, List
 from core.config import CONFIG
 from core.schemas import Message, SenderType, MessageType
 
-API_VERSION = "0.1"
+API_VERSION = "0.55"
 
 
 class MessageSender:
     """
     Helper class for sending messages in NLWebHandler.
-    
+
     This class encapsulates message sending utilities to reduce clutter
     in the main NLWebHandler class.
     """
-    
+
     def __init__(self, handler):
         """
         Initialize the MessageSender with a reference to the NLWebHandler.
-        
+
         Args:
             handler: The NLWebHandler instance this sender belongs to.
         """
         self.handler = handler
-    
+        self._result_index = 0
+
+    def _is_v055(self):
+        """Check if the current request uses v0.55 protocol."""
+        return getattr(self.handler, 'protocol_version', None) == '0.55'
+
     def create_initial_user_message(self):
         """
         Create the initial user query message as a Message object.
@@ -104,17 +109,32 @@ class MessageSender:
             pass
     
     async def send_begin_response(self):
-        """Send begin-nlweb-response message at the start of query processing."""
+        """Send begin/start message at the start of query processing."""
         if not (self.handler.streaming and self.handler.http_handler is not None):
             return
-            
+
+        if self._is_v055():
+            try:
+                await self.handler.http_handler.write_sse_event("start", {
+                    "_meta": {
+                        "version": "0.55",
+                        "response_type": "answer",
+                        "mode": self.handler.generate_mode or "list",
+                        "site": self.handler.site
+                    },
+                    "streaming": True
+                })
+            except Exception:
+                pass
+            return
+
         begin_message = {
             "message_type": "begin-nlweb-response",
             "conversation_id": self.handler.conversation_id,
             "query": self.handler.query,
             "timestamp": int(time.time() * 1000)
         }
-        
+
         try:
             await self.handler.http_handler.write_stream(begin_message)
         except Exception:
@@ -122,23 +142,33 @@ class MessageSender:
     
     async def send_end_response(self, error=False):
         """
-        Send end-nlweb-response message at the end of query processing.
-        
+        Send end/complete message at the end of query processing.
+
         Args:
             error: If True, indicates the query ended with an error
         """
         if not (self.handler.streaming and self.handler.http_handler is not None):
             return
-            
+
+        if self._is_v055():
+            complete_data = {"_meta": {"version": "0.55"}}
+            if error:
+                complete_data["_meta"]["error"] = True
+            try:
+                await self.handler.http_handler.write_sse_event("complete", complete_data)
+            except Exception:
+                pass
+            return
+
         end_message = {
             "message_type": "end-nlweb-response",
             "conversation_id": self.handler.conversation_id,
             "timestamp": int(time.time() * 1000)
         }
-        
+
         if error:
             end_message["error"] = True
-        
+
         try:
             await self.handler.http_handler.write_stream(end_message)
         except Exception:
@@ -275,31 +305,39 @@ class MessageSender:
     
     async def send_message(self, message):
         """Send a message with appropriate metadata and routing."""
-#        async with self.handler._send_lock:  # Protect send operation with lock
-            # Add metadata to all messages (both streaming and non-streaming)
-        # Debug: message type
         message_type = message.get('message_type', 'unknown')
-        # print(f"[MessageSender] Sending message type: {message_type}")
         message = self.add_message_metadata(message)
-            
+
         # Always store the message (for both streaming and non-streaming)
         self.store_message(message)
-            
+
         if (self.handler.streaming and self.handler.http_handler is not None):
-                # Streaming mode: also send via write_stream
-                
+            # Streaming mode: send via SSE
+
             # Check if this is the first result and add time-to-first-result header
             if message.get("message_type") == "result" and not self.handler.first_result_sent:
                 self.handler.first_result_sent = True
                 await self.send_time_to_first_result()
-                
+
             # Send headers if not already sent
             await self._send_headers_if_needed(is_streaming=True)
-                
+
             try:
-                await self.handler.http_handler.write_stream(message)
+                if self._is_v055() and message.get("message_type") == "result":
+                    # v0.55: emit event: result per item
+                    for item in message.get("content", []):
+                        await self.handler.http_handler.write_sse_event("result", {
+                            "index": self._result_index,
+                            "item": item
+                        })
+                        self._result_index += 1
+                elif self._is_v055():
+                    # v0.55: other message types sent as unnamed data events
+                    await self.handler.http_handler.write_stream(message)
+                else:
+                    await self.handler.http_handler.write_stream(message)
             except Exception as e:
-                self.handler.connection_alive_event.clear()  # Use event instead of flag
+                self.handler.connection_alive_event.clear()
         else:
             # Non-streaming mode: just store (already done above)
             # Send headers if not already sent

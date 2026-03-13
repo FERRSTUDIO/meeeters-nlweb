@@ -151,7 +151,7 @@ export class UnifiedChatInterface {
         document.getElementById('mode-dropdown')?.classList.remove('show');
       }
     });
-    
+
     // Sidebar toggle
     const sidebarToggle = document.getElementById('sidebar-toggle');
     const sidebar = document.getElementById('sidebar');
@@ -420,52 +420,117 @@ export class UnifiedChatInterface {
     this.connectSSE(message);
   }
 
-  connectSSE(message) {
-    // Send query to /ask endpoint via SSE
+  async connectSSE(message) {
+    // Send query to /ask endpoint via POST (v0.55 protocol)
     const baseUrl = window.location.origin === 'file://' ? 'http://localhost:8000' : '';
     const content = message.content || {};
-    const params = new URLSearchParams();
-    params.set('query', content.query || '');
-    params.set('site', content.site || 'all');
-    params.set('mode', content.mode || 'list');
-    params.set('streaming', 'true');
-    if (message.conversation_id) {
-      params.set('conversation_id', message.conversation_id);
-    }
-    if (content.prev_queries && content.prev_queries.length > 0) {
-      params.set('prev', JSON.stringify(content.prev_queries));
-    }
-    // Pass through any additional params from the content
+
+    // Build v0.55 structured request body
+    const querySection = { text: content.query || '', site: content.site || 'all' };
+    // Pass through extra params (scorer, db, generate_mode, etc.)
     for (const [key, value] of Object.entries(content)) {
       if (!['query', 'site', 'mode', 'prev_queries'].includes(key) && value !== undefined) {
-        params.set(key, typeof value === 'object' ? JSON.stringify(value) : value);
+        querySection[key] = value;
       }
     }
 
-    const url = `${baseUrl}/ask?${params}`;
-
-    const eventSource = new EventSource(url);
-
-    eventSource.onopen = () => {};
-
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        this.handleStreamData(data, true);
-      } catch (e) {
-      }
+    const body = {
+      query: querySection,
+      prefer: { streaming: true, mode: content.mode || 'list' },
+      meta: { version: '0.55' }
     };
 
-    eventSource.onerror = (error) => {
-      eventSource.close();
+    if (content.prev_queries && content.prev_queries.length > 0) {
+      body.context = { prev: content.prev_queries };
+    }
+    if (message.conversation_id) {
+      if (!body.meta.session_context) body.meta.session_context = {};
+      body.meta.session_context.conversation_id = message.conversation_id;
+    }
 
+    try {
+      const response = await fetch(`${baseUrl}/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+
+      if (!response.ok) {
+        this.showError('Failed to get response. Please try again.');
+        this.endStreaming();
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events from buffer
+        while (buffer.includes('\n\n')) {
+          const idx = buffer.indexOf('\n\n');
+          const block = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+
+          let eventName = null;
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event: ')) {
+              eventName = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                this.handleSSEEvent(eventName, data);
+              } catch (e) {}
+              eventName = null;
+            } else if (line.startsWith(':')) {
+              // SSE comment (keepalive), ignore
+            }
+          }
+        }
+      }
+
+      // Stream ended
+      this.endStreaming();
+    } catch (e) {
       if (!this.state.currentStreaming || !this.state.currentStreaming.hasReceivedContent) {
         this.showError('Failed to get response. Please try again.');
         this.endStreaming();
       }
-    };
+    }
+  }
 
-    this.currentEventSource = eventSource;
+  handleSSEEvent(eventName, data) {
+    // Map v0.55 named events to internal message format
+    if (eventName === 'start') {
+      this.handleStreamData({
+        message_type: 'begin-nlweb-response',
+        timestamp: Date.now()
+      }, true);
+    } else if (eventName === 'result') {
+      this.handleStreamData({
+        message_type: 'result',
+        content: [data.item],
+        timestamp: Date.now()
+      }, true);
+    } else if (eventName === 'complete') {
+      this.handleStreamData({
+        message_type: 'end-nlweb-response',
+        timestamp: Date.now()
+      }, true);
+    } else if (eventName === 'error') {
+      this.handleStreamData({
+        message_type: 'error',
+        content: data.message || 'Error',
+        timestamp: Date.now()
+      }, true);
+    } else {
+      // Unnamed events (data-only) — pass through with existing format
+      this.handleStreamData(data, true);
+    }
   }
   
   // ========== Unified Stream Handling ==========

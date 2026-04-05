@@ -138,6 +138,6 @@ class SummarizeResults(PromptRunner):
             return
         self.handler.summary = response["summary"]
         message = {"message_type": "result", "@type": "Summary", "content": self.handler.summary}
-        asyncio.create_task(self.handler.send_message(message))
+        await self.handler.send_message(message)
         # Use proper state update
         await self.handler.state.precheck_step_done("post_ranking")

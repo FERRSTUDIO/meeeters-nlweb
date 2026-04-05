@@ -181,11 +181,6 @@ class GenerateAnswer(NLWebHandler):
             description_tasks = []
             answer = response["answer"]
             
-            # Create initial message with just the answer
-            message = {"message_type": "nlws", "@type": "GeneratedAnswer", "answer": answer, "items": json_results}
-            logger.info("Sending initial answer")
-            await self.send_message(message)
-            
             # Process each URL mentioned in the response
             if "urls" in response and response["urls"]:
                 for url in response["urls"]:
@@ -221,12 +216,13 @@ class GenerateAnswer(NLWebHandler):
                             "schema_object": json.loads(json_str),
                         })
                         
-                    # Update message with descriptions
-                    message = {"message_type": "nlws", "@type": "GeneratedAnswer", "answer": answer, "items": json_results}
-                    logger.info(f"Sending final answer with {len(json_results)} item descriptions")
-                    await self.send_message(message)
             else:
-                logger.warning("No URLs found in synthesis response")
+                logger.info("No URLs found in synthesis response")
+
+            # Send a single response with the answer and any item descriptions
+            message = {"message_type": "nlws", "@type": "GeneratedAnswer", "answer": answer, "items": json_results}
+            logger.info(f"Sending answer with {len(json_results)} item descriptions")
+            await self.send_message(message)
                 
         except Exception as e:
             logger.exception(f"Error in synthesizeAnswer: {e}")

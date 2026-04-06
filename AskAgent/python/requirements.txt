@@ -5,7 +5,7 @@ chardet>=5.2.0
 jsonschema>=4.19.1
 mcp>=1.0.0
 marshmallow<4.0.0
-packaging<24,>=16.8
+packaging>=16.8,<27
 protobuf<5,>=3.20
 matplotlib>=3.8.0
 python-dotenv>=1.0.0

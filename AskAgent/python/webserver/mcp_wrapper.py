@@ -132,8 +132,6 @@ class MCPHandler:
 
     async def handle_initialize(self, params):
         """Handle initialize request"""
-        params.get("protocolVersion", "")
-        params.get("capabilities", {})
         client_info = params.get("clientInfo", {})
 
         logger.info(f"MCP Initialize request from {client_info.get('name', 'unknown')} v{client_info.get('version', 'unknown')}")

@@ -142,7 +142,7 @@ async def oauth_login_handler(request: web.Request) -> web.Response:
 
 async def oauth_callback_handler(request: web.Request) -> web.Response:
     """Handle OAuth callback - serves the callback HTML page"""
-    request.match_info['provider']
+    _provider = request.match_info['provider']  # from route, not used yet
 
     # Serve the oauth-callback.html file
     try:

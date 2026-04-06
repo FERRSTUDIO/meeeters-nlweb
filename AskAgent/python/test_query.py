@@ -73,7 +73,7 @@ async def test_query(query, site='all', streaming=True, top_k=10, endpoint='ask'
                                 for item in content:
                                     results_count += 1
                                     name = item.get('name', 'N/A')
-                                    item.get('source_site_name', item.get('site', 'N/A'))
+                                    site_name = item.get('source_site_name', item.get('site', 'N/A'))
                                     score = item.get('score', 0)
                                     print(f"  Result {results_count}: {name[:50]}... (score: {score})")
 

@@ -48,8 +48,8 @@ def trim_schema_json_graph(schema_json, site):
         if (not should_skip_item(site, item) and "@type" in item):
             item_type = item["@type"]
             if (item_type in leaf_types):
-                trim_schema_json(item, site)
-                return [trim_schema_json(item, site)]
+                trimmed = trim_schema_json(item, site)
+                return [trimmed]
     for item in schema_json:
         trimmed_item = trim_schema_json(item, site)
         if trimmed_item is not None:

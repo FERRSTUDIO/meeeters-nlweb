@@ -38,7 +38,7 @@ class SiteRetrievalTestCase(TestCase):
 @dataclass
 class SiteRetrievalTestResult(TestResult):
     """Test result for site retrieval tests."""
-    sites: list[str] = None
+    sites: list[str] | None = None
     site_count: int = 0
 
     def __post_init__(self):

@@ -54,7 +54,6 @@ class QueryRewrite(PromptRunner):
 
             # Extract the rewritten queries from the response
             rewritten_queries = response.get("rewritten_queries", [])
-            response.get("query_count", 0)
 
             # Validate the response
             if not rewritten_queries or not isinstance(rewritten_queries, list):

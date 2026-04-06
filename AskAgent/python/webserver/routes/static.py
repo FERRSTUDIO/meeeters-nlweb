@@ -16,9 +16,12 @@ def setup_static_routes(app: web.Application):
     config = app.get('config', {})
     static_dir = config.get('static_directory', '../static')
 
-    # Convert to absolute path
+    # Convert to absolute path and ensure it stays within the project
     base_path = Path(__file__).parent.parent.parent.parent.parent
-    static_path = base_path / static_dir.removeprefix('../')
+    static_path = (base_path / static_dir).resolve()
+    if not static_path.is_relative_to(base_path.resolve()):
+        logger.error(f"Static directory {static_path} is outside project root")
+        return
 
     if not static_path.exists():
         logger.warning(f"Static directory not found at {static_path}")

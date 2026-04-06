@@ -296,7 +296,6 @@ class MessageSender:
 
     async def send_message(self, message):
         """Send a message with appropriate metadata and routing."""
-        message.get('message_type', 'unknown')
         message = self.add_message_metadata(message)
 
         # Always store the message (for both streaming and non-streaming)

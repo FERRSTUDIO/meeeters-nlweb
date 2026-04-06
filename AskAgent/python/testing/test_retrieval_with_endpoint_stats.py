@@ -83,7 +83,6 @@ async def analyze_query_with_endpoints(query: str, site: str, retriever: Endpoin
         total = len(results)
         urls = set()
         sources = defaultdict(int)
-        defaultdict(set)
 
         # Analyze results
         for result in results:

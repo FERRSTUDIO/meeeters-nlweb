@@ -1,5 +1,5 @@
 # Core dependencies - always required
-azure-search-documents>=11.6.0
+azure-search-documents>=12.0.0
 azure-identity>=1.25.3
 chardet>=5.2.0
 jsonschema>=4.19.1
@@ -51,7 +51,7 @@ PyJWT>=2.12.1
 
 # For Azure AI Search:
 # azure-core>=1.30.0
-# azure-search-documents>=11.6.0
+# azure-search-documents>=12.0.0
 
 # For Milvus:
 # pymilvus>=1.1.0

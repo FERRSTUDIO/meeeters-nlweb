@@ -17,7 +17,9 @@ tool_selection_enabled: true
 
 # Enable or disable memory functionality
 # When set to false, the system will not analyze queries for memory requests
-memory_enabled: true
+# Disabled: the site search widget is stateless (no per-user memory) -> saves
+# one LLM pre-check per query (latency + cost).
+memory_enabled: false
 
 # Enable or disable query analysis
 # When set to false, the system will skip item type detection, multi-item type detection, and query type detection
@@ -25,11 +27,13 @@ analyze_query_enabled: true
 
 # Enable or disable decontextualization
 # When set to false, the system will not attempt to decontextualize queries based on previous context
-decontextualize_enabled: true
+# Disabled: single-shot search, no prior conversation to resolve -> saves an LLM pre-check.
+decontextualize_enabled: false
 
 # Enable or disable required info checking
 # When set to false, the system will not check if required information is present before processing queries
-required_info_enabled: true
+# Disabled: the widget should just search, never ask follow-up questions -> saves an LLM pre-check.
+required_info_enabled: false
 
 # Enable or disable aggregation functionality
 # When set to false, the system will not perform aggregation operations

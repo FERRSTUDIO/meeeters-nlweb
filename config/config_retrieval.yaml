@@ -1,4 +1,4 @@
-write_endpoint: qdrant_local
+write_endpoint: postgres
 
 endpoints:
 
@@ -81,7 +81,7 @@ endpoints:
     use_knn: false
 
   postgres:
-    enabled: false
+    enabled: true
     # Database connection details (i.e. "postgresql://<HOST>:<PORT>/<DATABASE>?user=<USERNAME>&sslmode=require")
     api_endpoint_env: POSTGRES_CONNECTION_STRING
     # Password for authentication 

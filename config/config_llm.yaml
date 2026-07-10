@@ -63,10 +63,12 @@ endpoints:
     api_endpoint_env: OPENAI_ENDPOINT
     llm_type: openai
     models:
-      # Cost-optimised: NLWeb calls the "high" model once per candidate result
-      # (scoring + description), so it dominates spend. mini is ~5x cheaper than
-      # gpt-4.1; nano handles the light query-analysis tasks for ~cents/month.
-      high: gpt-4.1-mini
+      # Cost-optimised to the floor: both tiers on the cheapest OpenAI model.
+      # NLWeb calls the "high" model once per candidate result (scoring +
+      # description) so it dominates spend; nano (~$0.10/$0.40 per M) is ~20x
+      # cheaper than gpt-4.1 and also faster. Ranking quality is slightly lower
+      # than mini; bump high back to gpt-4.1-mini if results degrade.
+      high: gpt-4.1-nano
       low: gpt-4.1-nano
 
   snowflake:

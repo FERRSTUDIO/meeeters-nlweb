@@ -63,8 +63,11 @@ endpoints:
     api_endpoint_env: OPENAI_ENDPOINT
     llm_type: openai
     models:
-      high: gpt-4.1
-      low: gpt-4.1-mini
+      # Cost-optimised: NLWeb calls the "high" model once per candidate result
+      # (scoring + description), so it dominates spend. mini is ~5x cheaper than
+      # gpt-4.1; nano handles the light query-analysis tasks for ~cents/month.
+      high: gpt-4.1-mini
+      low: gpt-4.1-nano
 
   snowflake:
     api_key_env: SNOWFLAKE_PAT

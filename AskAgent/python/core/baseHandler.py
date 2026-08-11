@@ -354,7 +354,11 @@ class NLWebHandler:
 
         tasks.append(asyncio.create_task(self.decontextualizeQuery().do()))
         tasks.append(asyncio.create_task(fastTrack.FastTrack(self).do()))
-        tasks.append(asyncio.create_task(query_rewrite.QueryRewrite(self).do()))
+        # QueryRewrite disabled: rewritten_queries is only consumed by the Bing
+        # retrieval client (disabled) and /who. Here it was one more LLM call
+        # gating pre_checks_done_event, i.e. pure added latency before results.
+        # tasks.append(asyncio.create_task(query_rewrite.QueryRewrite(self).do()))
+        self.rewritten_queries = [self.query]
 
         # Check if a specific tool is requested via the 'tool' parameter
         requested_tool = get_param(self.query_params, "tool", str, None)

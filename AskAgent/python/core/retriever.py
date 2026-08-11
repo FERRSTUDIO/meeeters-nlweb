@@ -1086,7 +1086,11 @@ def get_vector_db_client(endpoint_name: str | None = None,
 
 async def search(query: str,
                 site: str = "all",
-                num_results: int = 50,
+                # 20, not 50: NLWeb runs one ranking LLM call PER candidate, so
+                # this count == the ranking fan-out. At 50 a warm query took ~10s
+                # (measured). We only ever send max_results (10) with score>51, so
+                # 20 candidates cover the top 10 while ~halving latency and cost.
+                num_results: int = 20,
                 endpoint_name: str | None = None,
                 query_params: dict[str, Any] | None = None,
                 handler: Any | None = None,

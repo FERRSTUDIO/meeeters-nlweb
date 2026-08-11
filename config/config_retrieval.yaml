@@ -4,8 +4,10 @@ endpoints:
 
 #Azure endpoints
   
+  # Disabled: env keys not configured on Render; every extra enabled endpoint
+  # adds a parallel search we then WAIT on (latency = slowest endpoint).
   nlweb_west:
-    enabled: true
+    enabled: false
     api_key_env: NLWEB_WEST_API_KEY
     api_endpoint_env: NLWEB_WEST_ENDPOINT
     index_name: embeddings1536
@@ -92,8 +94,10 @@ endpoints:
     db_type: postgres
 
   # Option 1: Local file-based Qdrant storage
+  # Disabled: the corpus lives in postgres (write_endpoint); the local file DB
+  # is empty on Render and only adds retrieval latency.
   qdrant_local:
-    enabled: true
+    enabled: false
     # Use local file-based storage with a specific path
     database_path: "../data/db"
     # Set the collection name to use
@@ -114,8 +118,9 @@ endpoints:
     db_type: qdrant
 
   # Shopify MCP endpoint for product search across Shopify stores
+  # Disabled: no Shopify store; this was a REMOTE network call on every query.
   shopify:
-    enabled: true
+    enabled: false
     db_type: shopify_mcp
     # Note: mcp_endpoint will be dynamically set based on the site being queried
     name: Shopify MCP Search

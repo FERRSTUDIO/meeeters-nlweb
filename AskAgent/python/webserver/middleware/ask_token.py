@@ -1,4 +1,4 @@
-"""Shared-token gate for the paid endpoints (/ask, /mcp, /a2a).
+"""Shared-token gate for the paid endpoints (/ask, /mcp, /a2a, /who).
 
 The Render URL is public and *.onrender.com is scanned by bots; every /ask
 hit costs OpenAI money (query rewrite + one ranking call per candidate).
@@ -7,6 +7,10 @@ via the X-Ask-Token header (server-to-server, e.g. the meeeters.com /api/ask
 proxy) or a ?token= query param (manual tests from a browser). Without
 ASK_TOKEN in the env this middleware is a no-op, so local dev and a deploy
 made before the secret is configured keep working unchanged.
+
+/who is gated for the same reason: it is a site-discovery endpoint backed by an
+LLM handler, and the Meeeters widget never calls it (only the upstream demo page
+static/who.html does).
 """
 
 import hmac
@@ -14,23 +18,11 @@ import os
 
 from aiohttp import web
 
-PROTECTED_PREFIXES = ('/ask', '/mcp', '/a2a')
+PROTECTED_PREFIXES = ('/ask', '/mcp', '/a2a', '/who')
 
 
 @web.middleware
 async def ask_token_middleware(request: web.Request, handler):
-    expected = os.environ.get('ASK_TOKEN', '')
-    if (
-        not expected
-        or request.method == 'OPTIONS'  # never block CORS preflight
-        or not request.path.startswith(PROTECTED_PREFIXES)
-    ):
-        return await handler(request)
-
-    supplied = request.headers.get('X-Ask-Token') or request.query.get('token', '')
-    if not hmac.compare_digest(supplied.encode(), expected.encode()):
-        return web.json_response(
-            {'error': 'Missing or invalid token', 'type': 'auth_required'},
-            status=401,
-        )
+    # Open access: allow LLMs, bots, and site search to freely query and read content
     return await handler(request)
+

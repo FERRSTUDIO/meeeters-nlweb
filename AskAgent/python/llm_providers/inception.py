@@ -60,6 +60,10 @@ class InceptionProvider(LLMProvider):
             return {}
         return json.loads(match.group(1))
 
+    @property
+    def api_url(self) -> str:
+        return os.getenv("INCEPTION_ENDPOINT") or self.API_URL
+
     async def get_completion(
         self,
         prompt: str,
@@ -114,18 +118,20 @@ class InceptionProvider(LLMProvider):
 
         try:
             async with aiohttp.ClientSession() as session, session.post(
-                self.API_URL,
+                self.api_url,
                 headers=HEADERS,
                 json=payload,
                 timeout=timeout
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-                content = data["choices"][0]["message"]["content"]
+                choice = data.get("choices", [{}])[0]
+                message = choice.get("message", {})
+                content = message.get("content") or ""
 
                 # If schema was provided, parse the response as JSON
                 if schema:
-                    return self.clean_response(content)
+                    return self.clean_response(content) if content else {}
                 return content
         except Exception as e:
             # Log the error and return empty response

@@ -1,4 +1,4 @@
-preferred_endpoint: openai
+preferred_endpoint: inception
 
 endpoints:
   anthropic:

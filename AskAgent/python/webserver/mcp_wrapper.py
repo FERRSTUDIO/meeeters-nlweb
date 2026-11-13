@@ -10,6 +10,7 @@ Backwards compatibility is not guaranteed at this time.
 
 import asyncio
 import json
+import os
 import traceback
 
 from core.baseHandler import NLWebHandler
@@ -25,6 +26,18 @@ logger = get_logger(__name__)
 
 # MCP Protocol version
 MCP_PROTOCOL_VERSION = "2024-11-05"
+
+# Without a site, NLWeb treats the query as site "all", which goes to aggregation
+# across remote NLWeb sites and returns nothing here. MCP clients (Claude) rarely
+# pass a site, so default to the Meeeters corpus.
+MCP_DEFAULT_SITE = os.environ.get("MCP_DEFAULT_SITE", "meeeters")
+
+
+def sites_or_default(sites) -> list[str]:
+    """Return the requested sites as a list, or the Meeeters corpus when none is given."""
+    if not sites:
+        return [MCP_DEFAULT_SITE]
+    return sites if isinstance(sites, list) else [sites]
 
 class MCPHandler:
     """Handler for standard MCP protocol requests"""
@@ -166,7 +179,7 @@ class MCPHandler:
                     "site": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional list of sites to search. If not provided, searches all configured sites"
+                        "description": f"Optional list of sites to search. If not provided, searches '{MCP_DEFAULT_SITE}'"
                     },
                     "generate_mode": {
                         "type": "string",
@@ -232,8 +245,7 @@ class MCPHandler:
 
             # Update query params
             query_params["query"] = [query] if query else []
-            if sites:
-                query_params["site"] = sites if isinstance(sites, list) else [sites]
+            query_params["site"] = sites_or_default(sites)
             query_params["generate_mode"] = [generate_mode] if generate_mode else ["list"]
 
             # Create a streaming wrapper that sends SSE events
@@ -309,8 +321,7 @@ class MCPHandler:
             # Update query params with MCP arguments
             # Make sure to format values as lists (like URL parameters)
             query_params["query"] = [query] if query else []
-            if sites:
-                query_params["site"] = sites if isinstance(sites, list) else [sites]
+            query_params["site"] = sites_or_default(sites)
             query_params["generate_mode"] = [generate_mode] if generate_mode else ["list"]
             # print(f"=== QUERY PARAMS BEING PASSED ===")
             # print(f"query_params: {query_params}")
@@ -377,6 +388,10 @@ class MCPHandler:
 
                 # Get the list of sites
                 sites = await retriever.get_sites()
+                # The postgres backend can't list its sites: show the default one
+                # so clients know what to pass.
+                if not sites:
+                    sites = [MCP_DEFAULT_SITE]
 
                 # Format the response
                 return {
